@@ -31,7 +31,7 @@ static void help(bool iserror) {
   output << "		-V : prints version.\n";
   output << "		-h : prints this help.\n";
   output << "		-b : bughunt mode - implies tracemode.\n";
-  output << "		-d : delay for update refresh rate in seconds. default "
+  output << "		-d : delay for update refresh rate in seconds(should be integer value). default "
             "is 1.\n";
   output << "		-v : view mode (0 = KB/s, 1 = total KB, 2 = total B, 3 "
             "= total MB). default is 0.\n";
@@ -139,6 +139,7 @@ int main(int argc, char **argv) {
   while ((opt = getopt(argc, argv, "VahbtPd:f:p:v:c:sa")) != -1) {
      switch (opt) {
      case 'V':
+       printf(getVersion());
        exit(0);
      case 'h':
        help(false);
