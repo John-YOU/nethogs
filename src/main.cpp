@@ -39,12 +39,12 @@ static void help(bool iserror) {
   output << "		-t : tracemode.\n";
   // output << "		-f : format of packets on interface, default is
   // eth.\n";
-  output << "		-p : sniff in promiscious mode (not recommended).\n";
-  output << "       -P : id of the process that to be traced\n";
-  output << "       -f : the file output path\n";
+  output << "		-P : sniff in promiscious mode (not recommended).\n";
+  output << "		-p : id of the process that to be traced\n";
+  output << "		-f : the file output path\n";
   output << "		-s : sort output by sent column.\n";
-  output << "   -a : monitor all devices, even loopback/stopped ones.\n";
-  output << "		device : device(s) to monitor. default is all "
+  output << "   	-a : monitor all devices, even loopback/stopped ones.\n";
+  output << "		     device : device(s) to monitor. default is all "
             "interfaces up and running excluding loopback\n";
   output << std::endl;
   output << "When nethogs is running, press:\n";
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
   char *filter = NULL;
 
   int opt;
-  while ((opt = getopt(argc, argv, "Vahbtpd:f:P:v:c:sa")) != -1) {
+  while ((opt = getopt(argc, argv, "VahbtPd:f:p:v:c:sa")) != -1) {
      switch (opt) {
      case 'V':
        exit(0);
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
      case 't':
        tracemode = true;
        break;
-     case 'p':
+     case 'P':
        promisc = 1;
        break;
      case 's':
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
      case 'f':
        outFilePath=optarg;
        break;
-     case 'P':
+     case 'p':
        tracingPid=atoi(optarg);
        break;
        ///end
