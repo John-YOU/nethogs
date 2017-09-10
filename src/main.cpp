@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
   while ((opt = getopt(argc, argv, "VahbtPd:f:p:v:c:sa")) != -1) {
      switch (opt) {
      case 'V':
-       printf(getVersion());
+       printf(getVersion()+" modified-YH\n");
        exit(0);
      case 'h':
        help(false);
