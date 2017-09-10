@@ -28,8 +28,11 @@
 #include <cerrno>
 #include <cstdlib>
 #include <algorithm>
-
+#include <fstream>
+#include <iomanip>
+#include <ctime>
 #include <ncurses.h>
+#include <sys/sysctl.h>
 #include "nethogs.h"
 #include "process.h"
 
@@ -45,8 +48,11 @@ extern Process *unknownip;
 extern bool sortRecv;
 
 extern int viewMode;
-extern bool showcommandline;
-
+///start
+extern std::string outFilePath;
+extern int tracingPid;
+bool flag=true;///check if it's the first time
+///end
 extern unsigned refreshlimit;
 extern unsigned refreshcount;
 
@@ -65,12 +71,11 @@ const char *COLUMN_FORMAT_RECEIVED = "%11.3f";
 
 class Line {
 public:
-  Line(const char *name, const char *cmdline, double n_recv_value,
-       double n_sent_value, pid_t pid, uid_t uid, const char *n_devicename) {
+  Line(const char *name, double n_recv_value, double n_sent_value, pid_t pid,
+       uid_t uid, const char *n_devicename) {
     assert(pid >= 0);
     assert(pid <= PID_MAX);
     m_name = name;
-    m_cmdline = cmdline;
     sent_value = n_sent_value;
     recv_value = n_recv_value;
     devicename = n_devicename;
@@ -87,7 +92,6 @@ public:
 
 private:
   const char *m_name;
-  const char *m_cmdline;
   const char *devicename;
   pid_t m_pid;
   uid_t m_uid;
@@ -124,9 +128,27 @@ std::string uid2username(uid_t uid) {
 /**
  * Render the provided text at the specified location, truncating if the length
  * of the text exceeds a maximum. If the
+ * text must be truncated, the string ".." will be rendered, followed by max_len
+ * - 2 characters of the provided text.
+ *//*
+static void mvaddstr_truncate_leading(int row, int col, const char *str,
+                                      std::size_t str_len,
+                                      std::size_t max_len) {
+  if (str_len < max_len) {
+    mvaddstr(row, col, str);
+  } else {
+    mvaddstr(row, col, "..");
+    addnstr(str + 2, max_len - 2);
+  }
+}
+
+/**
+ * Render the provided text at the specified location, truncating if the length
+ * of the text exceeds a maximum. If the
  * text must be truncated, the text will be rendered up to max_len - 2
  * characters and then ".." will be rendered.
  */
+/*
 static void mvaddstr_truncate_trailing(int row, int col, const char *str,
                                        std::size_t str_len,
                                        std::size_t max_len) {
@@ -136,44 +158,50 @@ static void mvaddstr_truncate_trailing(int row, int col, const char *str,
     mvaddnstr(row, col, str, max_len - 2);
     addstr("..");
   }
-}
+}*/
 
-/**
- * Render the provided progname and cmdline at the specified location,
- * truncating if the length of the values exceeds a maximum.
- * If the text must be truncated, the text will be rendered up to max_len - 2
- * characters and then ".." will be rendered.
- * cmdline is truncated first and then progname.
- */
-static void mvaddstr_truncate_cmdline(int row, int col, const char *progname,
-                                      const char *cmdline,
-                                      std::size_t max_len) {
-  std::size_t proglen = strlen(progname);
-  std::size_t max_cmdlen;
 
-  if (proglen > max_len) {
-    mvaddnstr(row, col, progname, max_len - 2);
-    addstr("..");
-    max_cmdlen = 0;
+///start
+static int wtf_truncate_trailing(int col, const char *str,
+                                       std::size_t str_len,
+                                       std::size_t max_len, std::ofstream& ofile) {
+  if (str_len < max_len) {
+	  for (int i=0;i<col;i++)
+	      	ofile<<" ";
+	  ofile<<str;
+	  return str_len;
   } else {
-    mvaddstr(row, col, progname);
-    max_cmdlen = max_len - proglen - 1;
-  }
-
-  if (showcommandline && cmdline) {
-
-    std::size_t cmdlinelen = strlen(cmdline);
-
-    if ((cmdlinelen + 1) > max_cmdlen) {
-      if (max_cmdlen >= 3) {
-        mvaddnstr(row, col + proglen + 1, cmdline, max_cmdlen - 3);
-        addstr("..");
-      }
-    } else {
-      mvaddstr(row, col + proglen + 1, cmdline);
-    }
+	  for (int i=0;i<col;i++)
+		  ofile<<" ";
+	  std::string tmp(str,0,max_len-2);
+	  ofile<<tmp;
+	  ofile<<"..";
+	  return max_len;
   }
 }
+static int wtf_truncate_leading(int col, const char *str,
+										std::size_t str_len,
+										std::size_t max_len, std::ofstream& ofile) {
+  if (str_len < max_len) {
+	  for (int i=0;i<col;i++)
+	  	      	ofile<<" ";
+	  ofile<<str;
+	  return str_len;
+  } else {
+	  for (int i=0;i<col;i++)
+		  ofile<<" ";
+	  ofile<<"..";
+	  std::string tmp(str,0,max_len-2);
+	  ofile<<tmp;
+	  return max_len;
+  }
+}
+static void skip_write(int col, const char *str,std::ofstream& ofile){
+	for (int i=0;i<col;i++)
+		  	      	ofile<<" ";
+	ofile<<str;
+}
+///end
 
 void Line::show(int row, unsigned int proglen) {
   assert(m_pid >= 0);
@@ -188,24 +216,99 @@ void Line::show(int row, unsigned int proglen) {
   const int column_offset_unit =
       column_offset_received + COLUMN_WIDTH_RECEIVED + 1;
 
+  ///start
+  int currentIndex=0;//record current index
+  std::ofstream outfile;
+  std::string filename=outFilePath;
+  outfile.open(filename.c_str(), std::ofstream::app);
+  char* x;
+  ///end
+
+  ///TIME
+  time_t rawtime;
+  struct tm * timeinfo;
+  char buffer[80];
+
+  time (&rawtime);
+  timeinfo = localtime(&rawtime);
+
+  strftime(buffer,sizeof(buffer),"%d-%m-%Y %H:%M:%S",timeinfo);
+  std::string dt(buffer);
+  outfile<<dt;
+
   // PID column
-  if (m_pid == 0)
-    mvaddch(row, column_offset_pid + COLUMN_WIDTH_PID - 1, '?');
-  else
-    mvprintw(row, column_offset_pid, COLUMN_FORMAT_PID, m_pid);
+  if (m_pid == 0){
+    ///mvaddch(row, column_offset_pid + COLUMN_WIDTH_PID - 1, '?');
+    ///start
+    for (int i=0;i<column_offset_pid + COLUMN_WIDTH_PID - 1;i++)
+    	outfile<<" ";
+    outfile<<"?";
+    ///end
+  }
+  else{
+    ///mvprintw(row, column_offset_pid, COLUMN_FORMAT_PID, m_pid);
+    ///start
+    for (int i=0;i<column_offset_pid;i++)
+    	outfile<<" ";
+    x= new char[100];
+    sprintf(x,COLUMN_FORMAT_PID, m_pid);
+    std::string str=x;
+    outfile<<str;
+    ///end
+  }
 
   std::string username = uid2username(m_uid);
+  /*/
   mvaddstr_truncate_trailing(row, column_offset_user, username.c_str(),
                              username.size(), COLUMN_WIDTH_USER);
-
-  mvaddstr_truncate_cmdline(row, column_offset_program, m_name, m_cmdline,
+  mvaddstr_truncate_leading(row, column_offset_program, m_name, strlen(m_name),
                             proglen);
-
   mvaddstr(row, column_offset_dev, devicename);
-
   mvprintw(row, column_offset_sent, COLUMN_FORMAT_SENT, sent_value);
 
-  mvprintw(row, column_offset_received, COLUMN_FORMAT_RECEIVED, recv_value);
+  mvprintw(row, column_offset_received, COLUMN_FORMAT_RECEIVED, recv_value);/*/
+
+  ///start
+  currentIndex=column_offset_user-1;//for clarify
+  currentIndex=column_offset_user + wtf_truncate_trailing(1,username.c_str(),
+          	  	  	  	  	  username.size(), COLUMN_WIDTH_USER, outfile);
+  currentIndex=column_offset_program + wtf_truncate_leading(column_offset_program-currentIndex,m_name,
+		  	  	  	  	  	  strlen(m_name), proglen, outfile);
+  skip_write(column_offset_dev-currentIndex,devicename,outfile);
+  currentIndex=column_offset_dev+strlen(devicename);
+
+  skip_write(column_offset_sent-currentIndex, "", outfile);
+  x=new char[64];
+  sprintf(x,COLUMN_FORMAT_SENT, sent_value);
+  std::string str=x;
+  outfile<<str;
+  currentIndex=column_offset_sent+11;
+
+  x=new char[64];
+  sprintf(x,COLUMN_FORMAT_RECEIVED, recv_value);
+  str=x;
+  outfile<<str;
+  currentIndex=column_offset_received+11;
+
+  if (viewMode == VIEWMODE_KBPS) {
+		  skip_write(column_offset_unit-currentIndex,"KB/sec",outfile);
+		  currentIndex=column_offset_unit+6;
+	} else if (viewMode == VIEWMODE_TOTAL_MB) {
+		  skip_write(column_offset_unit-currentIndex,"MB    ",outfile);
+		  currentIndex=column_offset_unit+6;
+	} else if (viewMode == VIEWMODE_TOTAL_KB) {
+		  skip_write(column_offset_unit-currentIndex,"KB    ",outfile);
+		  currentIndex=column_offset_unit+6;
+	} else if (viewMode == VIEWMODE_TOTAL_B) {
+		  skip_write(column_offset_unit-currentIndex,"B     ",outfile);
+		  currentIndex=column_offset_unit+6;
+	}
+  outfile<<std::endl;
+  outfile.close();
+
+  ///end
+
+  /*/
   if (viewMode == VIEWMODE_KBPS) {
     mvaddstr(row, column_offset_unit, "KB/sec");
   } else if (viewMode == VIEWMODE_TOTAL_MB) {
@@ -214,14 +317,12 @@ void Line::show(int row, unsigned int proglen) {
     mvaddstr(row, column_offset_unit, "KB    ");
   } else if (viewMode == VIEWMODE_TOTAL_B) {
     mvaddstr(row, column_offset_unit, "B     ");
-  }
+  }/*/
 }
 
 void Line::log() {
-  std::cout << m_name;
-  if (showcommandline && m_cmdline)
-    std::cout << ' ' << m_cmdline;
-  std::cout << '/' << m_pid << '/' << m_uid << "\t" << sent_value << "\t" << recv_value << std::endl;
+  std::cout << m_name << '/' << m_pid << '/' << m_uid << "\t" << sent_value
+            << "\t" << recv_value << std::endl;
 }
 
 int GreatestFirst(const void *ma, const void *mb) {
@@ -252,14 +353,19 @@ int GreatestFirst(const void *ma, const void *mb) {
   return 1;
 }
 
+///modify here to add arguments
 void init_ui() {
+	/*
   WINDOW *screen = initscr();
+
   raw();
   noecho();
   cbreak();
-  nodelay(screen, TRUE);
+
+  nodelay(screen, TRUE);*/
   caption = new std::string("NetHogs");
   caption->append(getVersion());
+
   // caption->append(", running at ");
 }
 
@@ -282,10 +388,6 @@ void ui_tick() {
   case 'r':
     /* sort on 'received' */
     sortRecv = true;
-    break;
-  case 'l':
-    /* show cmdline' */
-    showcommandline = !showcommandline;
     break;
   case 'm':
     /* switch mode: total vs kb/s */
@@ -315,45 +417,99 @@ void show_trace(Line *lines[], int nproc) {
 }
 
 void show_ncurses(Line *lines[], int nproc) {
-  int rows;             // number of terminal rows
+  int rows=10;             // number of terminal rows///I modify it to 10
   int cols;             // number of terminal columns
   unsigned int proglen; // max length of the "PROGRAM" column
 
   double sent_global = 0;
   double recv_global = 0;
 
-  getmaxyx(stdscr, rows, cols); /* find the boundaries of the screeen */
+  ///getmaxyx(stdscr, rows, cols); /* find the boundaries of the screeen */
+  ///seems no need for terminal display, I want to set the width of output file fixed
+  cols=95;
 
+  /*/
   if (cols < 62) {
     erase();
     mvprintw(0, 0,
              "The terminal is too narrow! Please make it wider.\nI'll wait...");
     return;
-  }
+  }/*/
 
   if (cols > PROGNAME_WIDTH)
     cols = PROGNAME_WIDTH;
 
-  proglen = cols - 55;
+  proglen = cols - 67;
+  /// start
 
+  time_t rawtime;
+  struct tm * timeinfo;
+  char buffer[80];
+
+  time (&rawtime);
+  timeinfo = localtime(&rawtime);
+
+  strftime(buffer,sizeof(buffer),"%d-%m-%Y %H:%M:%S",timeinfo);
+  std::string dt(buffer);
+
+   std::ofstream outfile (outFilePath.c_str(),std::ofstream::app);
+   char* x = new char[150];
+
+  if (flag)
+  {
+	  //outfile<< "Local time: "<<dt;
+	  	sprintf(x,"TIME                   PID USER     %-*.*s  DEV        SENT      RECEIVED       ",
+	               proglen, proglen, "PROGRAM");
+		std::string str=x;
+		outfile<<str<<std::endl;
+		flag=false;
+  }
+
+  outfile.close();
+  ///end
+  /*/
   erase();
   mvprintw(0, 0, "%s", caption->c_str());
   attron(A_REVERSE);
   mvprintw(2, 0,
            "    PID USER     %-*.*s  DEV        SENT      RECEIVED       ",
            proglen, proglen, "PROGRAM");
-  attroff(A_REVERSE);
-
+  attroff(A_REVERSE);/*/
   /* print them */
+
+  ///if there is no io for specified process, I also need to display 0 for it
+
+
   int i;
   for (i = 0; i < nproc; i++) {
-    if (i + 3 < rows)
-      lines[i]->show(i + 3, proglen);
+    if (i + 3 < rows)///i want to set rows as fixed, say only top 10
+      lines[i]->show(i + 3, proglen);///need to modify show function
     recv_global += lines[i]->recv_value;
     sent_global += lines[i]->sent_value;
     delete lines[i];
   }
 
+  /*
+  x=new char[150];
+  sprintf(x,"  TOTAL        %-*.*s          %11.3f%11.3f ",
+           proglen, proglen, " ", sent_global, recv_global);
+  ofile<<x;
+  if (viewMode == VIEWMODE_KBPS) {
+  		  skip_write(0,"KB/sec",ofile);
+  	} else if (viewMode == VIEWMODE_TOTAL_MB) {
+  		  skip_write(0,"MB    ",ofile);
+  	} else if (viewMode == VIEWMODE_TOTAL_KB) {
+  		  skip_write(0,"KB    ",ofile);
+  	} else if (viewMode == VIEWMODE_TOTAL_B) {
+  		  skip_write(0,"B     ",ofile);
+  	}*///this section is not needed now
+
+  /*for (int i=0;i<cols;i++)
+    	  ofile<<"#";
+  ofile<<"\n\n\n";*/
+  ///end
+
+  /*/
   attron(A_REVERSE);
   int totalrow = std::min(rows - 1, 3 + 1 + i);
   mvprintw(totalrow, 0, "  TOTAL        %-*.*s          %11.3f %11.3f ",
@@ -369,8 +525,9 @@ void show_ncurses(Line *lines[], int nproc) {
   }
   attroff(A_REVERSE);
   mvprintw(totalrow + 1, 0, "");
-  refresh();
+  refresh();/*/
 }
+
 
 // Display all processes and relevant network traffic using show function
 void do_refresh() {
@@ -395,6 +552,16 @@ void do_refresh() {
     // walk though its connections, summing up their data, and
     // throwing away connections that haven't received a package
     // in the last CONNTIMEOUT seconds.
+	 ///start
+
+	  if (tracingPid!=0){
+		if (curproc->getVal()->pid!=(pid_t)tracingPid){
+			 curproc = curproc->next;
+			continue;
+		}
+	}
+	///end
+
     assert(curproc->getVal() != NULL);
     assert(nproc == processes->size());
 
@@ -415,20 +582,25 @@ void do_refresh() {
     assert(curproc->getVal()->pid >= 0);
     assert(n < nproc);
 
-    lines[n] = new Line(curproc->getVal()->name, curproc->getVal()->cmdline,
-                        value_recv, value_sent, curproc->getVal()->pid, uid,
-                        curproc->getVal()->devicename);
-    curproc = curproc->next;
+    lines[n] =
+      new Line(curproc->getVal()->name, value_recv, value_sent,
+               curproc->getVal()->pid, uid, curproc->getVal()->devicename);
     n++;
-  }
 
-  /* sort the accumulated lines */
-  qsort(lines, nproc, sizeof(Line *), GreatestFirst);
+    curproc = curproc->next;
+  }
+  /* sort the accumulated lines *////modify size
+  qsort(lines, n, sizeof(Line *), GreatestFirst);
+
+  if (tracingPid!=0 && n==0){
+	  lines[n]=new Line("This process has no IO now",0.0,0.0,(pid_t)tracingPid,-1,"");
+	  n++;
+  }
 
   if (tracemode || DEBUG)
     show_trace(lines, nproc);
-  else
-    show_ncurses(lines, nproc);
+  else///here modify parameters to n
+    show_ncurses(lines, n);
 
   if (refreshlimit != 0 && refreshcount >= refreshlimit)
     quit_cb(0);

@@ -27,8 +27,7 @@ static void help(bool iserror) {
   // output << "usage: nethogs [-V] [-b] [-d seconds] [-t] [-p] [-f (eth|ppp))]
   // [device [device [device ...]]]\n";
   output << "usage: nethogs [-V] [-h] [-b] [-d seconds] [-v mode] [-c count] "
-            "[-t] [-p] [-s] [-a] [-l] [-f filter] "
-            "[device [device [device ...]]]\n";
+            "[-t] [-p] [-s] [device [device [device ...]]]\n";
   output << "		-V : prints version.\n";
   output << "		-h : prints this help.\n";
   output << "		-b : bughunt mode - implies tracemode.\n";
@@ -41,11 +40,10 @@ static void help(bool iserror) {
   // output << "		-f : format of packets on interface, default is
   // eth.\n";
   output << "		-p : sniff in promiscious mode (not recommended).\n";
+  output << "       -P : id of the process that to be traced\n";
+  output << "       -f : the file output path\n";
   output << "		-s : sort output by sent column.\n";
-  output << "		-l : display command line.\n";
-  output << "		-a : monitor all devices, even loopback/stopped ones.\n";
-  output << "		-f : EXPERIMENTAL: specify string pcap filter (like tcpdump)."
-            " This may be removed or changed in a future version.\n";
+  output << "   -a : monitor all devices, even loopback/stopped ones.\n";
   output << "		device : device(s) to monitor. default is all "
             "interfaces up and running excluding loopback\n";
   output << std::endl;
@@ -53,7 +51,6 @@ static void help(bool iserror) {
   output << " q: quit\n";
   output << " s: sort by SENT traffic\n";
   output << " r: sort by RECEIVE traffic\n";
-  output << " l: display command line\n";
   output << " m: switch between total (KB, B, MB) and KB/s mode\n";
 }
 
@@ -139,50 +136,51 @@ int main(int argc, char **argv) {
   char *filter = NULL;
 
   int opt;
-  while ((opt = getopt(argc, argv, "Vhbtpsd:v:c:laf:")) != -1) {
-    switch (opt) {
-    case 'V':
-      versiondisplay();
-      exit(0);
-    case 'h':
-      help(false);
-      exit(0);
-    case 'b':
-      bughuntmode = true;
-      tracemode = true;
-      break;
-    case 't':
-      tracemode = true;
-      break;
-    case 'p':
-      promisc = 1;
-      break;
-    case 's':
-      sortRecv = false;
-      break;
-    case 'd':
-      refreshdelay = (time_t) atoi(optarg);
-      break;
-    case 'v':
-      viewMode = atoi(optarg) % VIEWMODE_COUNT;
-      break;
-    case 'c':
-      refreshlimit = atoi(optarg);
-      break;
-    case 'l':
-      showcommandline = true;
-      break;
-    case 'a':
-      all = true;
-      break;
-    case 'f':
-      filter = optarg;
-      break;
-    default:
-      help(true);
-      exit(EXIT_FAILURE);
-    }
-  }
+  while ((opt = getopt(argc, argv, "Vahbtpd:f:P:v:c:sa")) != -1) {
+     switch (opt) {
+     case 'V':
+       exit(0);
+     case 'h':
+       help(false);
+       exit(0);
+     case 'b':
+       bughuntmode = true;
+       tracemode = true;
+       break;
+     case 't':
+       tracemode = true;
+       break;
+     case 'p':
+       promisc = 1;
+       break;
+     case 's':
+       sortRecv = false;
+       break;
+     case 'd':
+       refreshdelay = atoi(optarg);
+       break;
+     case 'v':
+       viewMode = atoi(optarg) % VIEWMODE_COUNT;
+       break;
+     case 'c':
+       refreshlimit = atoi(optarg);
+       break;
+     case 'a':
+       all = true;
+       break;
+     ///modify add file output path
+     case 'f':
+       outFilePath=optarg;
+       break;
+     case 'P':
+       tracingPid=atoi(optarg);
+       break;
+       ///end
+     default:
+       help(true);
+       exit(EXIT_FAILURE);
+     }
+   }
 
   device *devices = get_devices(argc - optind, argv + optind, all);
   if (devices == NULL)

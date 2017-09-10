@@ -60,6 +60,11 @@ bool bughuntmode = false;
 // sort on sent or received?
 bool sortRecv = true;
 bool showcommandline = false;
+
+///start
+std::string outFilePath="./output.txt";
+int tracingPid=0;
+///end
 // viewMode: kb/s or total
 int viewMode = VIEWMODE_KBPS;
 const char version[] = " version " VERSION;
