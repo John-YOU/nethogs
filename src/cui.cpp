@@ -140,9 +140,9 @@ static void mvaddstr_truncate_leading(int row, int col, const char *str,
     mvaddstr(row, col, "..");
     addnstr(str + 2, max_len - 2);
   }
-}
+}*/
 
-/**
+/*
  * Render the provided text at the specified location, truncating if the length
  * of the text exceeds a maximum. If the
  * text must be truncated, the text will be rendered up to max_len - 2
@@ -222,6 +222,7 @@ void Line::show(int row, unsigned int proglen) {
   std::string filename=outFilePath;
   outfile.open(filename.c_str(), std::ofstream::app);
   char* x;
+  int _row=row;_row++;
   ///end
 
   ///TIME

@@ -19,7 +19,7 @@ static fd_set pc_loop_fd_set;
 static std::vector<int> pc_loop_fd_list;
 static bool pc_loop_use_select = true;
 
-static void versiondisplay(void) { std::cout << version << "\n"; }
+///static void versiondisplay(void) { std::cout << version << "\n"; }
 
 static void help(bool iserror) {
   std::ostream &output = (iserror ? std::cerr : std::cout);
